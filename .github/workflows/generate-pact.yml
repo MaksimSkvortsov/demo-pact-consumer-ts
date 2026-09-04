@@ -1,0 +1,51 @@
+name: Generate Pact
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-pact:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run consumer contract tests
+        run: npm test
+
+      - name: Confirm Pact file was generated
+        run: test -f pacts/typescript-consumer-customer-provider.json
+
+      - name: Commit generated Pact files
+        if: github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'chore: update generated Pact files')
+        run: |
+          if git diff --quiet -- pacts/*.json; then
+            echo "No Pact changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pacts/*.json
+          git commit -m "chore: update generated Pact files"
+          git push
